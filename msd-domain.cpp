@@ -74,7 +74,7 @@ class AnalysisTemplate : public TrajectoryAnalysisModule
         std::vector<std::vector<double>>                 coord_sol_x;
         std::vector<std::vector<double>>                 coord_sol_y;
         std::vector<std::vector<double>>                 coord_sol_z;
-        
+        std::vector<double>     atom_count;
         double                          zmax_i=10, zmin_i=-10;
         double                          zmax,zmin,comz;
         double                          boxx,boxy,boxz;
@@ -90,6 +90,7 @@ class AnalysisTemplate : public TrajectoryAnalysisModule
         double                          fr_time_start;
         int                             n_start=10;
 
+        
         std::vector<double>                     dym_ele{std::vector<double>(8,0)};
         std::vector<std::vector<std::vector<std::vector<double> > > >       record_dym;
         std::vector<std::vector<double> >                                   record_dym_i;
@@ -209,8 +210,6 @@ AnalysisTemplate::initAnalysis(const TrajectoryAnalysisSettings &settings,
         record_dym.push_back(runoutofnames);
     }
     std::cout << "Total number of atoms processed is:" << atom_num <<std::endl;
-    count.assign(atom_num,-1);
-    std::cout<<count[atom_num-1]<<std::endl;
 }
 
 
@@ -229,6 +228,7 @@ AnalysisTemplate::analyzeFrame(int frnr, const t_trxframe &fr, t_pbc *pbc,
     std::vector<double> coord_frame_x;
     std::vector<double> coord_frame_y;
     std::vector<double> coord_frame_z;
+    int atom_count_frame=0;
 
     if(timeflag==1)
         {
@@ -265,12 +265,14 @@ AnalysisTemplate::analyzeFrame(int frnr, const t_trxframe &fr, t_pbc *pbc,
         zmin=comz+zmin_i;
         //std::cout<<"Zmin:"<<zmin<<" Zmax:"<<zmax<<std::endl;
         
+    double pos_x_sel,pos_y_sel,pos_z_sel;
+    
     for(int i=0;i<nr_sel;i++)
     {
         SelectionPosition p = sel.position(i);
-        pos_x=p.x()[0];
-        pos_y=p.x()[1];
-        pos_z=p.x()[2];
+        pos_x_sel=p.x()[0];
+        pos_y_sel=p.x()[1];
+        pos_z_sel=p.x()[2];
         
         dym_ele[0]=frnr;
         dym_ele[1]=fr.time;
@@ -279,20 +281,20 @@ AnalysisTemplate::analyzeFrame(int frnr, const t_trxframe &fr, t_pbc *pbc,
         dym_ele[3]=p.x()[1];
         dym_ele[4]=p.x()[2];
 
-        if(pos_z<0 || pos_z>=boxz)
+        if(pos_z_sel<0 || pos_z_sel>=boxz)
         {
-            pos_z=pos_z-boxz*floor(pos_z/boxz);
+            pos_z_sel=pos_z_sel-boxz*floor(pos_z_sel/boxz);
         }
 
-        if (pos_z<=zmax && pos_z>=zmin)
+        if (pos_z_sel<=zmax && pos_z_sel>=zmin)
         {   
             coord_frame_x.push_back(dym_ele[2]);
             coord_frame_y.push_back(dym_ele[3]);
             coord_frame_z.push_back(dym_ele[4]);
+            atom_count_frame++;
         }
         else
         {
-            ille_a++;
             coord_frame_x.push_back(-1000.0);
             coord_frame_y.push_back(-1000.0);
             coord_frame_z.push_back(-1000.0);
@@ -304,10 +306,9 @@ AnalysisTemplate::analyzeFrame(int frnr, const t_trxframe &fr, t_pbc *pbc,
     coord_sol_y.push_back(coord_frame_y);
     coord_sol_z.push_back(coord_frame_z);
     frame_time.push_back(fr.time);
-        //frave /= nr;
-        //dh.setPoint(g, frave);
+    atom_count.push_back(atom_count_frame);
+    std::cout<<"No. of atoms in domain in frame at:"<< fr.time<< " are:"<<atom_count_frame<<" out of "<<coord_frame_z.size()<<std::endl;
     }
-    //dh.finishFrame();
 void
 AnalysisTemplate::finishAnalysis(int nframes)
 {
@@ -316,9 +317,8 @@ AnalysisTemplate::finishAnalysis(int nframes)
     std::vector<double>                 msd_z(nframes,0.0);
     std::vector<double>                 norm(nframes,0.0);
     
-    std::cout << "Size:" << coord_sol_x[0].size() << std::endl;
-    std::cout << "Size2:" << coord_sol_y[1].size() << std::endl;
-    
+    std::vector<double>                 atom_count(nframes,0.0);
+
     for(int i=0;i<nframes;i++)
     {
         //if (i%int(nframes/10)==0)
@@ -329,15 +329,19 @@ AnalysisTemplate::finishAnalysis(int nframes)
         {
             for (int k=0;k<atom_num;k++)    
             {
-                if (coord_sol_z[j+i][k] != -1000.0 && coord_sol_z[i][k]!= -1000.0)
+                
+                if (coord_sol_z[i+j][k]!= -1000.0 && coord_sol_z[i][k]!=-1000.0 && coord_sol_z[i+j-1][k] != -1000.0)
                 {
+                    atom_count[i]++;
                     msd_x[j] += (coord_sol_x[j+i][k]-coord_sol_x[i][k])*(coord_sol_x[j+i][k]-coord_sol_x[i][k]); 
                     msd_y[j] += (coord_sol_y[j+i][k]-coord_sol_y[i][k])*(coord_sol_y[j+i][k]-coord_sol_y[i][k]); 
                     msd_z[j] += (coord_sol_z[j+i][k]-coord_sol_z[i][k])*(coord_sol_z[j+i][k]-coord_sol_z[i][k]);
-                norm[j]++;
+                    norm[j]++;
                 }
             }
         }
+    
+    //std::cout<<"Atom count: "<<atom_count[i]<<std::endl;
     }
 
     norm[0]=1; 
